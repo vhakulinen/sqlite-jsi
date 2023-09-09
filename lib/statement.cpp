@@ -154,7 +154,7 @@ Statement::createSelect(std::shared_ptr<std::vector<Param>> &params) {
       sqlite3_clear_bindings(m_stmt);
 
       for (size_t i = 0; i < params->size(); i++) {
-        (*params)[i].bind(m_stmt, i);
+        (*params)[i].bind(m_stmt, i + 1);
       }
 
       auto rows = std::make_shared<std::vector<Row>>();
@@ -215,7 +215,7 @@ Statement::createExec(std::shared_ptr<std::vector<Param>> &params) {
       sqlite3_clear_bindings(m_stmt);
 
       for (size_t i = 0; i < params->size(); i++) {
-        (*params)[i].bind(m_stmt, i);
+        (*params)[i].bind(m_stmt, i + 1);
       }
 
       int stepRes;
