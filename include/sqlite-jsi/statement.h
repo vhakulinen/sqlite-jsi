@@ -31,6 +31,8 @@ private:
 
   jsi::HostFunctionType
   createSelect(std::shared_ptr<std::vector<Param>> &params);
+
+  jsi::HostFunctionType createGet(std::shared_ptr<std::vector<Param>> params);
 };
 
 } // namespace sqlitejsi

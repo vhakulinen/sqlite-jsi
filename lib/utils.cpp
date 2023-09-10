@@ -36,6 +36,27 @@ jsi::Object sqliteJSIBadArgumentsError(jsi::Runtime &rt, std::string msg) {
 
   return err;
 }
+
+jsi::Object sqliteJSINoRowsError(jsi::Runtime &rt) {
+  auto err = rt.global()
+                 .getPropertyAsFunction(rt, "SQLiteJSINoRowsError")
+                 .callAsConstructor(rt)
+                 .asObject(rt);
+  err.setProperty(rt, "msg", "no rows");
+
+  return err;
+}
+
+jsi::Object sqliteJSITooManyRows(jsi::Runtime &rt) {
+  auto err = rt.global()
+                 .getPropertyAsFunction(rt, "SQLiteJSITooManyRowsError")
+                 .callAsConstructor(rt)
+                 .asObject(rt);
+  err.setProperty(rt, "msg", "too many rows");
+
+  return err;
+}
+
 void installUtils(jsi::Runtime &rt) {
   // Errors from sqlite3.
   rt.evaluateJavaScript(
@@ -48,6 +69,14 @@ void installUtils(jsi::Runtime &rt) {
 
   rt.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(
                             "function SQLiteJSIBadArgumentsError(){}"),
+                        "<eval>");
+
+  rt.evaluateJavaScript(
+      std::make_shared<jsi::StringBuffer>("function SQLiteJSINoRowsError(){}"),
+      "<eval>");
+
+  rt.evaluateJavaScript(std::make_shared<jsi::StringBuffer>(
+                            "function SQLiteJSITooManyRowsError(){}"),
                         "<eval>");
 }
 

@@ -22,14 +22,14 @@ Param parse(jsi::Runtime &rt, const jsi::Value &val) {
     return Param(val.asNumber());
   }
 
-  // jsi::Value(&val);
+  // TODO(ville): Use dedicated error value
   throw jsi::JSError("unsupported type", rt, jsi::Value(rt, val));
-  // throw jsi::JSError(rt, "unsupported type");
 }
 
 std::vector<Param> Param::parseJsi(jsi::Runtime &rt, const jsi::Value *args,
                                    size_t count) {
-  std::vector<Param> vals(count);
+  std::vector<Param> vals = {};
+  vals.reserve(count);
 
   for (size_t i = 0; i < count; i++) {
     vals.push_back(parse(rt, (const jsi::Value &)args[i]));
@@ -38,17 +38,19 @@ std::vector<Param> Param::parseJsi(jsi::Runtime &rt, const jsi::Value *args,
   return vals;
 }
 
-void Param::bind(sqlite3_stmt *stmt, int pos) {
+int Param::bind(sqlite3_stmt *stmt, int pos) {
+  assert(pos > 0); // SQLite bind positions start at 1.
+
   switch (m_type) {
-  case Null: {
-    sqlite3_bind_null(stmt, pos);
-  } break;
-  case String: {
-    sqlite3_bind_text(stmt, pos, m_string.c_str(), -1, SQLITE_TRANSIENT);
-  } break;
-  case Number: {
-    sqlite3_bind_double(stmt, pos, m_number);
-  } break;
+  case Null:
+    return sqlite3_bind_null(stmt, pos);
+  case String:
+    return sqlite3_bind_text(stmt, pos, m_string.c_str(), -1, SQLITE_TRANSIENT);
+  case Number:
+    return sqlite3_bind_double(stmt, pos, m_number);
+  default:
+    // TODO(ville): Use std::variant
+    __builtin_unreachable();
   }
 }
 } // namespace sqlitejsi

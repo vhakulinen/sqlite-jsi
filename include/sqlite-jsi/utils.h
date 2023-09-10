@@ -11,6 +11,10 @@ jsi::Object sqliteJSIBadQueryError(jsi::Runtime &rt, std::string msg);
 
 jsi::Object sqliteJSIBadArgumentsError(jsi::Runtime &rt, std::string msg);
 
+jsi::Object sqliteJSINoRowsError(jsi::Runtime &rt);
+
+jsi::Object sqliteJSITooManyRows(jsi::Runtime &rt);
+
 jsi::Function createToString(jsi::Runtime &rt, const jsi::PropNameID &name,
                              std::string str);
 

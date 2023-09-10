@@ -27,7 +27,7 @@ public:
   static std::vector<Param> parseJsi(jsi::Runtime &rt, const jsi::Value *args,
                                      size_t count);
 
-  void bind(sqlite3_stmt *stmt, int pos);
+  int bind(sqlite3_stmt *stmt, int pos);
 
 private:
   ValueType m_type;

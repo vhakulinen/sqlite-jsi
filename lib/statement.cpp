@@ -53,36 +53,42 @@ jsi::Value Column::toValue(jsi::Runtime &rt) {
   return val;
 }
 
+Column parseColumn(sqlite3_stmt *stmt, int i) {
+  auto name = std::string(sqlite3_column_name(stmt, i));
+  auto type = sqlite3_column_type(stmt, i);
+
+  switch (type) {
+  case SQLITE_INTEGER: {
+    auto v = Column{name, Value(sqlite3_column_int(stmt, i))};
+    return Column{name, Value(sqlite3_column_int(stmt, i))};
+  } break;
+  case SQLITE_FLOAT: {
+    return Column{name, Value(sqlite3_column_double(stmt, i))};
+  } break;
+  case SQLITE_TEXT: {
+    std::string text = std::string(
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
+    return Column{name, Value(text)};
+  } break;
+  case SQLITE_BLOB: {
+    auto blob = static_cast<const char *>(sqlite3_column_blob(stmt, i));
+    auto bytes = sqlite3_column_bytes(stmt, i);
+    return Column{name, std::vector<char>(blob, blob + bytes)};
+  } break;
+  case SQLITE_NULL: {
+    return Column{name, std::monostate()};
+  } break;
+  }
+
+  __builtin_unreachable();
+}
+
 Row parseRow(sqlite3_stmt *stmt) {
   auto count = sqlite3_data_count(stmt);
   auto row = Row();
 
   for (int i = 0; i < count; i++) {
-    auto name = std::string(sqlite3_column_name(stmt, i));
-    auto type = sqlite3_column_type(stmt, i);
-
-    switch (type) {
-    case SQLITE_INTEGER: {
-      auto v = Column{name, Value(sqlite3_column_int(stmt, i))};
-      row.push_back(Column{name, Value(sqlite3_column_int(stmt, i))});
-    } break;
-    case SQLITE_FLOAT: {
-      row.push_back(Column{name, Value(sqlite3_column_double(stmt, i))});
-    } break;
-    case SQLITE_TEXT: {
-      std::string text = std::string(
-          reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
-      row.push_back(Column{name, Value(text)});
-    } break;
-    case SQLITE_BLOB: {
-      auto blob = static_cast<const char *>(sqlite3_column_blob(stmt, i));
-      auto bytes = sqlite3_column_bytes(stmt, i);
-      row.push_back(Column{name, std::vector<char>(blob, blob + bytes)});
-    } break;
-    case SQLITE_NULL: {
-      row.push_back(Column{name, std::monostate()});
-    } break;
-    }
+    row.push_back(parseColumn(stmt, i));
   }
 
   return row;
@@ -132,7 +138,103 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         });
   }
 
+  if (prop == "get") {
+    return jsi::Function::createFromHostFunction(
+        rt, name, 1,
+        [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
+            size_t count) {
+          auto queryParams = std::make_shared<std::vector<Param>>(
+              Param::parseJsi(rt, args, count));
+
+          return rt.global()
+              .getPropertyAsFunction(rt, "Promise")
+              .callAsConstructor(
+                  rt, jsi::Function::createFromHostFunction(
+                          rt, jsi::PropNameID::forUtf8(rt, "Promise"), 2,
+                          createGet(queryParams)));
+        });
+  }
+
   return jsi::Value::undefined();
+}
+
+jsi::HostFunctionType
+Statement::createGet(std::shared_ptr<std::vector<Param>> params) {
+  return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
+             const jsi::Value *args, size_t count) {
+    if (count < 2) {
+      throw jsi::JSError(rt, "Invalid promise constructor");
+    }
+
+    auto resolve = std::make_shared<jsi::Value>(rt, args[0]);
+    auto reject = std::make_shared<jsi::Value>(rt, args[1]);
+
+    m_executor->queue([=]() {
+      ConnectionGuard conn(*m_conn);
+
+      // TODO(ville): how to handle reset errors?
+      sqlite3_reset(m_stmt);
+      sqlite3_clear_bindings(m_stmt);
+
+      for (size_t i = 0; i < params->size(); i++) {
+        int res = (*params)[i].bind(m_stmt, i + 1);
+
+        if (res != SQLITE_OK) {
+          auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+          return (*m_invoker)([reject, res, msg](jsi::Runtime &rt) {
+            auto err = sqliteError(rt, res, *msg);
+            reject->asObject(rt).asFunction(rt).call(rt, err);
+          });
+        }
+      }
+
+      int res = sqlite3_step(m_stmt);
+
+      // If we're already done, reject with "no rows" error.
+      if (res == SQLITE_DONE) {
+        return (*m_invoker)([reject](jsi::Runtime &rt) {
+          auto err = sqliteJSINoRowsError(rt);
+          reject->asObject(rt).asFunction(rt).call(rt, err);
+        });
+      }
+
+      // Handle any errors.
+      if (res != SQLITE_ROW) {
+        auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+        return (*m_invoker)([reject, res, msg](jsi::Runtime &rt) {
+          auto err = sqliteError(rt, res, *msg);
+          reject->asObject(rt).asFunction(rt).call(rt, err);
+        });
+      }
+
+      auto row = std::make_shared<Row>(parseRow(m_stmt));
+
+      // We shouldn't have got more that one row.
+      if (sqlite3_step(m_stmt) != SQLITE_DONE) {
+        while (sqlite3_step(m_stmt) != SQLITE_DONE) {
+          // Consume the remaining rows.
+        }
+
+        return (*m_invoker)([reject](jsi::Runtime &rt) {
+          reject->asObject(rt).asFunction(rt).call(rt,
+                                                   sqliteJSITooManyRows(rt));
+        });
+      }
+
+      return (*m_invoker)([resolve, row](jsi::Runtime &rt) {
+        jsi::Object obj = jsi::Object(rt);
+
+        for (auto column : *row) {
+          obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
+        }
+
+        resolve->asObject(rt).asFunction(rt).call(rt, obj);
+      });
+    });
+
+    return jsi::Value::undefined();
+  };
 }
 
 jsi::HostFunctionType
@@ -154,7 +256,15 @@ Statement::createSelect(std::shared_ptr<std::vector<Param>> &params) {
       sqlite3_clear_bindings(m_stmt);
 
       for (size_t i = 0; i < params->size(); i++) {
-        (*params)[i].bind(m_stmt, i + 1);
+        int res = (*params)[i].bind(m_stmt, i + 1);
+
+        if (res != SQLITE_OK) {
+          auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+          return (*m_invoker)([reject, res, msg](jsi::Runtime &rt) {
+            auto err = sqliteError(rt, res, *msg);
+            reject->asObject(rt).asFunction(rt).call(rt, err);
+          });
+        }
       }
 
       auto rows = std::make_shared<std::vector<Row>>();
@@ -215,7 +325,15 @@ Statement::createExec(std::shared_ptr<std::vector<Param>> &params) {
       sqlite3_clear_bindings(m_stmt);
 
       for (size_t i = 0; i < params->size(); i++) {
-        (*params)[i].bind(m_stmt, i + 1);
+        int res = (*params)[i].bind(m_stmt, i + 1);
+
+        if (res != SQLITE_OK) {
+          auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+          return (*m_invoker)([reject, res, msg](jsi::Runtime &rt) {
+            auto err = sqliteError(rt, res, *msg);
+            reject->asObject(rt).asFunction(rt).call(rt, err);
+          });
+        }
       }
 
       int stepRes;
