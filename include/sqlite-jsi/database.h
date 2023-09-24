@@ -9,7 +9,7 @@
 #include "sqlite-jsi/database.h"
 #include "sqlite-jsi/executor.h"
 #include "sqlite-jsi/invoker.h"
-#include "sqlite-jsi/param.h"
+#include "sqlite-jsi/value.h"
 
 namespace sqlitejsi {
 using namespace facebook;

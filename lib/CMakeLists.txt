@@ -26,10 +26,10 @@ add_library(sqlite-jsi
     connection.cpp
     database.cpp
     executor.cpp
-    param.cpp
     sqlite-jsi.cpp
     statement.cpp
     utils.cpp
+    value.cpp
     ${CMAKE_BINARY_DIR}/sqlite3/sqlite3.c
 )
 

@@ -23,16 +23,16 @@ typedef std::variant<
     std::monostate>
     ValueType;
 
-class Param final {
+class Value final {
 public:
-  Param(std::string val) : m_val(ValueType(val)){};
-  Param(double val) : m_val(ValueType(val)){};
-  Param(std::vector<char> val) : m_val(ValueType(val)){};
-  Param() : m_val(ValueType(std::monostate())){};
+  Value(std::string val) : m_val(ValueType(val)){};
+  Value(double val) : m_val(ValueType(val)){};
+  Value(std::vector<char> val) : m_val(ValueType(val)){};
+  Value() : m_val(ValueType(std::monostate())){};
 
-  static Param fromJsi(jsi::Runtime &rt, const jsi::Value &arg);
+  static Value fromJsi(jsi::Runtime &rt, const jsi::Value &arg);
 
-  static std::vector<Param> fromJsiArgs(jsi::Runtime &rt,
+  static std::vector<Value> fromJsiArgs(jsi::Runtime &rt,
                                         const jsi::Value *args, size_t count);
 
   jsi::Value toJsi(jsi::Runtime &rt);

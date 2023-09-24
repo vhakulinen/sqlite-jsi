@@ -27,12 +27,12 @@ private:
 
   sqlite3_stmt *m_stmt;
 
-  jsi::HostFunctionType createExec(std::shared_ptr<std::vector<Param>> &params);
+  jsi::HostFunctionType createExec(std::shared_ptr<std::vector<Value>> &params);
 
   jsi::HostFunctionType
-  createSelect(std::shared_ptr<std::vector<Param>> &params);
+  createSelect(std::shared_ptr<std::vector<Value>> &params);
 
-  jsi::HostFunctionType createGet(std::shared_ptr<std::vector<Param>> params);
+  jsi::HostFunctionType createGet(std::shared_ptr<std::vector<Value>> params);
 };
 
 } // namespace sqlitejsi

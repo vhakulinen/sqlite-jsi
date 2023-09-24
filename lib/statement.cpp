@@ -5,9 +5,9 @@
 #include "sqlite3.h"
 
 #include "sqlite-jsi/connection.h"
-#include "sqlite-jsi/param.h"
 #include "sqlite-jsi/statement.h"
 #include "sqlite-jsi/utils.h"
+#include "sqlite-jsi/value.h"
 
 namespace sqlitejsi {
 using namespace facebook;
@@ -15,7 +15,7 @@ using namespace sqlitejsi;
 
 struct Column {
   std::string name;
-  Param val;
+  Value val;
 
   jsi::Value toValue(jsi::Runtime &rt);
 };
@@ -30,24 +30,24 @@ Column parseColumn(sqlite3_stmt *stmt, int i) {
 
   switch (type) {
   case SQLITE_INTEGER: {
-    auto v = Column{name, Param(sqlite3_column_int(stmt, i))};
-    return Column{name, Param(sqlite3_column_int(stmt, i))};
+    auto v = Column{name, Value(sqlite3_column_int(stmt, i))};
+    return Column{name, Value(sqlite3_column_int(stmt, i))};
   } break;
   case SQLITE_FLOAT: {
-    return Column{name, Param(sqlite3_column_double(stmt, i))};
+    return Column{name, Value(sqlite3_column_double(stmt, i))};
   } break;
   case SQLITE_TEXT: {
     std::string text = std::string(
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
-    return Column{name, Param(text)};
+    return Column{name, Value(text)};
   } break;
   case SQLITE_BLOB: {
     auto blob = static_cast<const char *>(sqlite3_column_blob(stmt, i));
     auto bytes = sqlite3_column_bytes(stmt, i);
-    return Column{name, Param(std::vector<char>(blob, blob + bytes))};
+    return Column{name, Value(std::vector<char>(blob, blob + bytes))};
   } break;
   case SQLITE_NULL: {
-    return Column{name, Param()};
+    return Column{name, Value()};
   } break;
   }
 
@@ -80,8 +80,8 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::fromJsiArgs(rt, args, count));
+          auto queryParams = std::make_shared<std::vector<Value>>(
+              Value::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")
@@ -97,8 +97,8 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::fromJsiArgs(rt, args, count));
+          auto queryParams = std::make_shared<std::vector<Value>>(
+              Value::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")
@@ -114,8 +114,8 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::fromJsiArgs(rt, args, count));
+          auto queryParams = std::make_shared<std::vector<Value>>(
+              Value::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")
@@ -130,7 +130,7 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
 }
 
 jsi::HostFunctionType
-Statement::createGet(std::shared_ptr<std::vector<Param>> params) {
+Statement::createGet(std::shared_ptr<std::vector<Value>> params) {
   return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
              const jsi::Value *args, size_t count) {
     if (count < 2) {
@@ -209,7 +209,7 @@ Statement::createGet(std::shared_ptr<std::vector<Param>> params) {
 }
 
 jsi::HostFunctionType
-Statement::createSelect(std::shared_ptr<std::vector<Param>> &params) {
+Statement::createSelect(std::shared_ptr<std::vector<Value>> &params) {
   return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
              const jsi::Value *args, size_t count) {
     if (count < 2) {
@@ -278,7 +278,7 @@ Statement::createSelect(std::shared_ptr<std::vector<Param>> &params) {
 }
 
 jsi::HostFunctionType
-Statement::createExec(std::shared_ptr<std::vector<Param>> &params) {
+Statement::createExec(std::shared_ptr<std::vector<Value>> &params) {
   return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
              const jsi::Value *args, size_t count) {
     if (count < 2) {

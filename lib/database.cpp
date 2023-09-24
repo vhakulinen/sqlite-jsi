@@ -6,10 +6,10 @@
 
 #include "sqlite-jsi/connection.h"
 #include "sqlite-jsi/database.h"
-#include "sqlite-jsi/param.h"
 #include "sqlite-jsi/sqlite-jsi.h"
 #include "sqlite-jsi/statement.h"
 #include "sqlite-jsi/utils.h"
+#include "sqlite-jsi/value.h"
 
 namespace sqlitejsi {
 using namespace sqlitejsi;

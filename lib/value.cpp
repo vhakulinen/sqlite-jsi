@@ -4,34 +4,34 @@
 #include "jsi/jsi.h"
 #include "sqlite3.h"
 
-#include "sqlite-jsi/param.h"
+#include "sqlite-jsi/value.h"
 
 namespace sqlitejsi {
 
 // From cppreference.com's std::visit docs.
 template <class> inline constexpr bool always_false_v = false;
 
-Param Param::fromJsi(jsi::Runtime &rt, const jsi::Value &val) {
+Value Value::fromJsi(jsi::Runtime &rt, const jsi::Value &val) {
 
   if (val.isNull() || val.isUndefined()) {
-    return Param();
+    return Value();
   }
 
   if (val.isString()) {
-    return Param(val.asString(rt).utf8(rt));
+    return Value(val.asString(rt).utf8(rt));
   }
 
   if (val.isNumber()) {
-    return Param(val.asNumber());
+    return Value(val.asNumber());
   }
 
   // TODO(ville): Use dedicated error value
   throw jsi::JSError("unsupported type", rt, jsi::Value(rt, val));
 }
 
-std::vector<Param> Param::fromJsiArgs(jsi::Runtime &rt, const jsi::Value *args,
+std::vector<Value> Value::fromJsiArgs(jsi::Runtime &rt, const jsi::Value *args,
                                       size_t count) {
-  std::vector<Param> vals = {};
+  std::vector<Value> vals = {};
   vals.reserve(count);
 
   for (size_t i = 0; i < count; i++) {
@@ -41,7 +41,7 @@ std::vector<Param> Param::fromJsiArgs(jsi::Runtime &rt, const jsi::Value *args,
   return vals;
 }
 
-jsi::Value Param::toJsi(jsi::Runtime &rt) {
+jsi::Value Value::toJsi(jsi::Runtime &rt) {
   jsi::Value val = std::visit(
       [&](auto arg) {
         using T = std::decay_t<decltype(arg)>;
@@ -66,7 +66,7 @@ jsi::Value Param::toJsi(jsi::Runtime &rt) {
   return val;
 }
 
-int Param::bind(sqlite3_stmt *stmt, int pos) {
+int Value::bind(sqlite3_stmt *stmt, int pos) {
   assert(pos > 0); // SQLite bind positions start at 1.
 
   return std::visit(
