@@ -1,7 +1,3 @@
-#include <cstdio>
-#include <iostream>
-#include <memory>
-
 #include "jsi/jsi.h"
 
 #include "sqlite-jsi/connection.h"

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <variant>
 
 #include "jsi/jsi.h"

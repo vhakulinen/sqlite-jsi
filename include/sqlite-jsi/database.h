@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "jsi/jsi.h"
 #include "sqlite3.h"
 

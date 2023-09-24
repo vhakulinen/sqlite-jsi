@@ -1,8 +1,3 @@
-#include <cassert>
-#include <iostream>
-#include <mutex>
-#include <thread>
-
 #include "jsi/jsi.h"
 #include "sqlite3.h"
 

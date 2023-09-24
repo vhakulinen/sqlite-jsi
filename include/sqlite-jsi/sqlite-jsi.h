@@ -3,7 +3,6 @@
 #include "jsi/jsi.h"
 
 #include "sqlite-jsi/database.h"
-#include <vector>
 
 namespace sqlitejsi {
 

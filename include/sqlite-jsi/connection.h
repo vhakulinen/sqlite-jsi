@@ -1,7 +1,8 @@
 #pragma once
 
-#include "sqlite3.h"
 #include <mutex>
+
+#include "sqlite3.h"
 
 namespace sqlitejsi {
 class ConnectionGuard;

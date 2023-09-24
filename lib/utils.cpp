@@ -1,5 +1,4 @@
 #include "sqlite-jsi/utils.h"
-#include <iostream>
 
 namespace sqlitejsi {
 using namespace facebook;

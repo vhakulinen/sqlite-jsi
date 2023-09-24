@@ -1,7 +1,3 @@
-#include <iostream>
-#include <mutex>
-#include <thread>
-
 #include "sqlite-jsi/executor.h"
 
 namespace sqlitejsi {
@@ -24,7 +20,7 @@ Executor::~Executor() {
 
 bool Executor::isBusy() {
   std::lock_guard lock(m_m);
-  // We're busy if were executing some callback or have work queued for us.
+  // We're busy if we're executing some callback or have work queued for us.
   return m_busy || m_workitems.size() > 0;
 }
 

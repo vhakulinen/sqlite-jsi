@@ -1,7 +1,5 @@
-#include <deque>
 #include <fstream>
 #include <iostream>
-#include <mutex>
 #include <sstream>
 
 #include "hermes/hermes.h"

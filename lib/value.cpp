@@ -1,6 +1,3 @@
-#include <exception>
-#include <iostream>
-
 #include "jsi/jsi.h"
 #include "sqlite3.h"
 

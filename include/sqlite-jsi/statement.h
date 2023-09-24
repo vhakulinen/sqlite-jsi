@@ -1,11 +1,11 @@
 #pragma once
 
 #include "jsi/jsi.h"
-#include "sqlite-jsi/invoker.h"
 #include "sqlite3.h"
 
 #include "sqlite-jsi/connection.h"
 #include "sqlite-jsi/database.h"
+#include "sqlite-jsi/invoker.h"
 
 namespace sqlitejsi {
 using namespace facebook;
