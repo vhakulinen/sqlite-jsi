@@ -1,8 +1,6 @@
 #include "sqlite-jsi/utils.h"
 #include <iostream>
 
-#define C_STRING(x) #x
-
 namespace sqlitejsi {
 using namespace facebook;
 

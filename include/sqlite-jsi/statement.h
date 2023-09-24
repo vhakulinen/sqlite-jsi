@@ -18,6 +18,11 @@ public:
             std::shared_ptr<RtInvoker> invoker, sqlite3_stmt *stmt)
       : m_conn(conn), m_executor(executor), m_invoker(invoker), m_stmt(stmt){};
 
+  ~Statement() {
+    // Finalize the statement.
+    sqlite3_finalize(m_stmt);
+  }
+
   jsi::Value get(jsi::Runtime &, const jsi::PropNameID &name) override;
 
 private:

@@ -20,6 +20,8 @@ public:
   Database(jsi::Runtime &, std::string name, int flags,
            std::shared_ptr<RtInvoker> invoker);
 
+  ~Database();
+
   jsi::Value get(jsi::Runtime &, const jsi::PropNameID &name) override;
 
   bool isBusy();

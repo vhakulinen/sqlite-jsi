@@ -23,6 +23,7 @@ typedef std::variant<
     std::monostate>
     ValueType;
 
+/// A brige value between jsi <-> sqlite.
 class Value final {
 public:
   Value(std::string val) : m_val(ValueType(val)){};

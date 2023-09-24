@@ -22,11 +22,16 @@ Database::Database(jsi::Runtime &rt, std::string name, int flags,
   int res = sqlite3_open_v2(name.c_str(), &db, flags, NULL);
   if (res != SQLITE_OK) {
     const char *err = sqlite3_errmsg(db);
-    sqlite3_close(db);
+    sqlite3_close_v2(db);
     throw jsi::JSError(rt, err);
   }
 
   m_conn = std::make_shared<Connection>(db);
+}
+
+Database::~Database() {
+  ConnectionGuard conn(*m_conn);
+  sqlite3_close_v2(&conn);
 }
 
 bool Database::isBusy() { return m_executor->isBusy(); }
@@ -157,7 +162,7 @@ Database::createPrepare(std::shared_ptr<std::string> query) {
       if (res != SQLITE_OK) {
         std::string errMsg = sqlite3_errmsg(&conn);
 
-        // TODO(ville): finalize the statement?
+        sqlite3_finalize(stmt);
 
         return (*m_invoker)([reject, res, errMsg](jsi::Runtime &rt) {
           auto err = sqliteError(rt, res, errMsg);
@@ -166,6 +171,10 @@ Database::createPrepare(std::shared_ptr<std::string> query) {
       }
 
       if (!stmt) {
+        // Probably not needed, but calling finalize on NULL pointer is
+        // harmless no-op.
+        sqlite3_finalize(stmt);
+
         return (*m_invoker)([reject](jsi::Runtime &rt) {
           reject->asObject(rt).asFunction(rt).call(
               rt, sqliteJSIBadQueryError(
@@ -174,6 +183,8 @@ Database::createPrepare(std::shared_ptr<std::string> query) {
       }
 
       if (tail[0]) {
+        sqlite3_finalize(stmt);
+
         return (*m_invoker)([reject](jsi::Runtime &rt) {
           reject->asObject(rt).asFunction(rt).call(
               rt, sqliteJSIBadQueryError(
@@ -229,6 +240,10 @@ Database::createExec(std::shared_ptr<std::string> queryStr) {
         }
 
         if (!stmt) {
+          // Probably not needed, but calling finalize on NULL pointer is
+          // harmless no-op.
+          sqlite3_finalize(stmt);
+
           // SQLITE_OK and no statement means the query is whitespace or a
           // comment.
           query = tail;
@@ -242,9 +257,9 @@ Database::createExec(std::shared_ptr<std::string> queryStr) {
             continue;
           }
 
-          sqlite3_finalize(stmt);
-
           auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+          sqlite3_finalize(stmt);
 
           return (*m_invoker)([reject, stepRes, msg](jsi::Runtime &rt) {
             auto err = sqliteError(rt, stepRes, *msg);
