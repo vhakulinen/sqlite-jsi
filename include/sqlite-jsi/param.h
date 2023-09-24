@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <variant>
 
 #include "jsi/jsi.h"
 #include "sqlite3.h"
@@ -9,30 +10,37 @@ namespace sqlitejsi {
 
 using namespace facebook;
 
-enum ValueType {
-  // null, undefined
-  Null,
-  // string
-  String,
-  // number
-  Number,
-};
+typedef std::variant<
+    // sqlite integer
+    int,
+    // sqlite float, js number
+    double,
+    // sqlite text, js string
+    std::string,
+    // sqlite blob
+    std::vector<char>,
+    // sqlite NULL, js null & undefined
+    std::monostate>
+    ValueType;
 
 class Param final {
 public:
-  Param(std::string val) : m_type(ValueType::String), m_string(val){};
-  Param(double val) : m_type(ValueType::Number), m_number(val){};
-  Param() : m_type(ValueType::Null){};
+  Param(std::string val) : m_val(ValueType(val)){};
+  Param(double val) : m_val(ValueType(val)){};
+  Param(std::vector<char> val) : m_val(ValueType(val)){};
+  Param() : m_val(ValueType(std::monostate())){};
 
-  static std::vector<Param> parseJsi(jsi::Runtime &rt, const jsi::Value *args,
-                                     size_t count);
+  static Param fromJsi(jsi::Runtime &rt, const jsi::Value &arg);
+
+  static std::vector<Param> fromJsiArgs(jsi::Runtime &rt,
+                                        const jsi::Value *args, size_t count);
+
+  jsi::Value toJsi(jsi::Runtime &rt);
 
   int bind(sqlite3_stmt *stmt, int pos);
 
 private:
-  ValueType m_type;
-  std::string m_string;
-  double m_number;
+  ValueType m_val;
 };
 
 } // namespace sqlitejsi

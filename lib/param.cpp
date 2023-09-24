@@ -1,3 +1,6 @@
+#include <exception>
+#include <iostream>
+
 #include "jsi/jsi.h"
 #include "sqlite3.h"
 
@@ -5,10 +8,10 @@
 
 namespace sqlitejsi {
 
-// using namespace facebook;
-// using namespace sqlitejsi;
+// From cppreference.com's std::visit docs.
+template <class> inline constexpr bool always_false_v = false;
 
-Param parse(jsi::Runtime &rt, const jsi::Value &val) {
+Param Param::fromJsi(jsi::Runtime &rt, const jsi::Value &val) {
 
   if (val.isNull() || val.isUndefined()) {
     return Param();
@@ -26,31 +29,68 @@ Param parse(jsi::Runtime &rt, const jsi::Value &val) {
   throw jsi::JSError("unsupported type", rt, jsi::Value(rt, val));
 }
 
-std::vector<Param> Param::parseJsi(jsi::Runtime &rt, const jsi::Value *args,
-                                   size_t count) {
+std::vector<Param> Param::fromJsiArgs(jsi::Runtime &rt, const jsi::Value *args,
+                                      size_t count) {
   std::vector<Param> vals = {};
   vals.reserve(count);
 
   for (size_t i = 0; i < count; i++) {
-    vals.push_back(parse(rt, (const jsi::Value &)args[i]));
+    vals.push_back(fromJsi(rt, (const jsi::Value &)args[i]));
   }
 
   return vals;
 }
 
+jsi::Value Param::toJsi(jsi::Runtime &rt) {
+  jsi::Value val = std::visit(
+      [&](auto arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, int>) {
+          return jsi::Value(arg);
+        } else if constexpr (std::is_same_v<T, double>) {
+          return jsi::Value(arg);
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          return jsi::Value(jsi::String::createFromUtf8(rt, arg));
+        } else if constexpr (std::is_same_v<T, std::vector<char>>) {
+          // TODO(ville): Create ArrayBuffer and read data directory there.
+
+          return jsi::Value::null();
+        } else if constexpr (std::is_same_v<T, std::monostate>) {
+          return jsi::Value::null();
+        } else {
+          static_assert(always_false_v<T>, "non-exhaistive visitor");
+        }
+      },
+      m_val);
+
+  return val;
+}
+
 int Param::bind(sqlite3_stmt *stmt, int pos) {
   assert(pos > 0); // SQLite bind positions start at 1.
 
-  switch (m_type) {
-  case Null:
-    return sqlite3_bind_null(stmt, pos);
-  case String:
-    return sqlite3_bind_text(stmt, pos, m_string.c_str(), -1, SQLITE_TRANSIENT);
-  case Number:
-    return sqlite3_bind_double(stmt, pos, m_number);
-  default:
-    // TODO(ville): Use std::variant
-    __builtin_unreachable();
-  }
+  return std::visit(
+      [&](auto arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, int>) {
+          return sqlite3_bind_int(stmt, pos, arg);
+        } else if constexpr (std::is_same_v<T, double>) {
+          return sqlite3_bind_double(stmt, pos, arg);
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          return sqlite3_bind_text(stmt, pos, arg.c_str(), -1,
+                                   SQLITE_TRANSIENT);
+        } else if constexpr (std::is_same_v<T, std::vector<char>>) {
+          // TODO(ville): Implement.
+          throw new std::exception(); // Not implemented.
+          return -1;
+          // return sqlite3_bind_blob(stmt, pos, arg.data(), arg.size(),
+          // SQLITE_TRANSIENT);
+        } else if constexpr (std::is_same_v<T, std::monostate>) {
+          return sqlite3_bind_null(stmt, pos);
+        } else {
+          static_assert(always_false_v<T>, "non-exhaistive visitor");
+        }
+      },
+      m_val);
 }
 } // namespace sqlitejsi

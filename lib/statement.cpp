@@ -5,6 +5,7 @@
 #include "sqlite3.h"
 
 #include "sqlite-jsi/connection.h"
+#include "sqlite-jsi/param.h"
 #include "sqlite-jsi/statement.h"
 #include "sqlite-jsi/utils.h"
 
@@ -12,46 +13,16 @@ namespace sqlitejsi {
 using namespace facebook;
 using namespace sqlitejsi;
 
-typedef std::variant<int, double, std::string, std::vector<char>,
-                     std::monostate>
-    Value;
-
 struct Column {
   std::string name;
-  Value val;
+  Param val;
 
   jsi::Value toValue(jsi::Runtime &rt);
 };
 
 typedef std::vector<Column> Row;
 
-// From cppreference.com's std::visit docs.
-template <class> inline constexpr bool always_false_v = false;
-
-jsi::Value Column::toValue(jsi::Runtime &rt) {
-  jsi::Value val = std::visit(
-      [&](auto arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, int>) {
-          return jsi::Value(arg);
-        } else if constexpr (std::is_same_v<T, double>) {
-          return jsi::Value(arg);
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return jsi::Value(jsi::String::createFromUtf8(rt, arg));
-        } else if constexpr (std::is_same_v<T, std::vector<char>>) {
-          // TODO(ville): Create ArrayBuffer and read data directory there.
-
-          return jsi::Value::null();
-        } else if constexpr (std::is_same_v<T, std::monostate>) {
-          return jsi::Value::null();
-        } else {
-          static_assert(always_false_v<T>, "non-exhaistive visitor");
-        }
-      },
-      this->val);
-
-  return val;
-}
+jsi::Value Column::toValue(jsi::Runtime &rt) { return this->val.toJsi(rt); }
 
 Column parseColumn(sqlite3_stmt *stmt, int i) {
   auto name = std::string(sqlite3_column_name(stmt, i));
@@ -59,24 +30,24 @@ Column parseColumn(sqlite3_stmt *stmt, int i) {
 
   switch (type) {
   case SQLITE_INTEGER: {
-    auto v = Column{name, Value(sqlite3_column_int(stmt, i))};
-    return Column{name, Value(sqlite3_column_int(stmt, i))};
+    auto v = Column{name, Param(sqlite3_column_int(stmt, i))};
+    return Column{name, Param(sqlite3_column_int(stmt, i))};
   } break;
   case SQLITE_FLOAT: {
-    return Column{name, Value(sqlite3_column_double(stmt, i))};
+    return Column{name, Param(sqlite3_column_double(stmt, i))};
   } break;
   case SQLITE_TEXT: {
     std::string text = std::string(
         reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
-    return Column{name, Value(text)};
+    return Column{name, Param(text)};
   } break;
   case SQLITE_BLOB: {
     auto blob = static_cast<const char *>(sqlite3_column_blob(stmt, i));
     auto bytes = sqlite3_column_bytes(stmt, i);
-    return Column{name, std::vector<char>(blob, blob + bytes)};
+    return Column{name, Param(std::vector<char>(blob, blob + bytes))};
   } break;
   case SQLITE_NULL: {
-    return Column{name, std::monostate()};
+    return Column{name, Param()};
   } break;
   }
 
@@ -110,7 +81,7 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
           auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::parseJsi(rt, args, count));
+              Param::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")
@@ -127,7 +98,7 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
           auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::parseJsi(rt, args, count));
+              Param::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")
@@ -144,7 +115,7 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
           auto queryParams = std::make_shared<std::vector<Param>>(
-              Param::parseJsi(rt, args, count));
+              Param::fromJsiArgs(rt, args, count));
 
           return rt.global()
               .getPropertyAsFunction(rt, "Promise")

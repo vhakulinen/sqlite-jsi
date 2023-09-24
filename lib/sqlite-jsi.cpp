@@ -23,8 +23,6 @@ std::shared_ptr<Sqlite> Sqlite::install(jsi::Runtime &rt,
   rt.global().setProperty(rt, "SQLite", obj);
 
   installUtils(rt);
-  // auto js = std::make_shared<jsi::StringBuffer>("function SQLiteError (){}");
-  // rt.evaluateJavaScript(js, "<eval>");
 
   return sqlite;
 }
