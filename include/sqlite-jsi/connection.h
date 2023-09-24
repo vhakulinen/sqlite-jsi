@@ -35,6 +35,5 @@ private:
 
 /// Shorthand for taking ConnectionGuard.
 ConnectionGuard conn_guard(Connection &conn);
-//{ return ConnectionGuard(conn); }
 
 } // namespace sqlitejsi
