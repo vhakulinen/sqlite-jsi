@@ -27,4 +27,17 @@ const _undefined = () => db.select('select ? as val', undefined)
   .catch(error)
 // CHECK-NEXT: undefined [{"val":null}]
 
-str().then(integer).then(_float).then(_null).then(_undefined)
+const blob = () => {
+  const buf = new Int8Array(4);
+  buf[0] = 5;
+  buf[1] = 6;
+  buf[2] = 7;
+  buf[3] = 8;
+
+  return db.select('select ? as val', buf.buffer)
+    .then(res => print('blob', JSON.stringify(res.map(v => v.val = new Int8Array(v.val)))))
+    .catch(error)
+}
+// CHECK-NEXT: blob [{"0":5,"1":6,"2":7,"3":8}]
+
+str().then(integer).then(_float).then(_null).then(_undefined).then(blob)

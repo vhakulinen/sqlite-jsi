@@ -17,7 +17,7 @@ typedef std::variant<
     // sqlite text, js string
     std::string,
     // sqlite blob
-    std::vector<char>,
+    std::vector<uint8_t>,
     // sqlite NULL, js null & undefined
     std::monostate>
     ValueType;
@@ -27,7 +27,7 @@ class Value final {
 public:
   Value(std::string val) : m_val(ValueType(val)){};
   Value(double val) : m_val(ValueType(val)){};
-  Value(std::vector<char> val) : m_val(ValueType(val)){};
+  Value(std::vector<uint8_t> val) : m_val(ValueType(val)){};
   Value() : m_val(ValueType(std::monostate())){};
 
   static Value fromJsi(jsi::Runtime &rt, const jsi::Value &arg);
@@ -41,6 +41,17 @@ public:
 
 private:
   ValueType m_val;
+};
+
+class Buffer : public jsi::MutableBuffer {
+public:
+  Buffer(std::vector<uint8_t> data) : m_data(data) {}
+
+  size_t size() const override { return m_data.size(); }
+  uint8_t *data() override { return m_data.data(); }
+
+private:
+  std::vector<uint8_t> m_data;
 };
 
 } // namespace sqlitejsi

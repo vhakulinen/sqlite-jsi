@@ -39,9 +39,9 @@ Column parseColumn(sqlite3_stmt *stmt, int i) {
     return Column{name, Value(text)};
   } break;
   case SQLITE_BLOB: {
-    auto blob = static_cast<const char *>(sqlite3_column_blob(stmt, i));
+    auto blob = static_cast<const uint8_t *>(sqlite3_column_blob(stmt, i));
     auto bytes = sqlite3_column_bytes(stmt, i);
-    return Column{name, Value(std::vector<char>(blob, blob + bytes))};
+    return Column{name, Value(std::vector(blob, blob + bytes))};
   } break;
   case SQLITE_NULL: {
     return Column{name, Value()};

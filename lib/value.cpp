@@ -22,6 +22,18 @@ Value Value::fromJsi(jsi::Runtime &rt, const jsi::Value &val) {
     return Value(val.asNumber());
   }
 
+  if (val.isObject()) {
+    auto obj = val.asObject(rt);
+
+    if (obj.isArrayBuffer(rt)) {
+      auto buf = obj.getArrayBuffer(rt);
+      auto data = buf.data(rt);
+      auto size = buf.size(rt);
+
+      return Value(std::vector(data, data + size));
+    }
+  }
+
   // TODO(ville): Use dedicated error value
   throw jsi::JSError("unsupported type", rt, jsi::Value(rt, val));
 }
@@ -48,14 +60,14 @@ jsi::Value Value::toJsi(jsi::Runtime &rt) {
           return jsi::Value(arg);
         } else if constexpr (std::is_same_v<T, std::string>) {
           return jsi::Value(jsi::String::createFromUtf8(rt, arg));
-        } else if constexpr (std::is_same_v<T, std::vector<char>>) {
-          // TODO(ville): Create ArrayBuffer and read data directory there.
-
-          return jsi::Value::null();
+        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+          // TODO(ville): Would be nice to not have to copy.
+          auto buf = std::make_shared<Buffer>(arg);
+          return jsi::Value(jsi::ArrayBuffer(rt, buf));
         } else if constexpr (std::is_same_v<T, std::monostate>) {
           return jsi::Value::null();
         } else {
-          static_assert(always_false_v<T>, "non-exhaistive visitor");
+          static_assert(always_false_v<T>, "non-exhaustive visitor");
         }
       },
       m_val);
@@ -76,12 +88,9 @@ int Value::bind(sqlite3_stmt *stmt, int pos) {
         } else if constexpr (std::is_same_v<T, std::string>) {
           return sqlite3_bind_text(stmt, pos, arg.c_str(), -1,
                                    SQLITE_TRANSIENT);
-        } else if constexpr (std::is_same_v<T, std::vector<char>>) {
-          // TODO(ville): Implement.
-          throw new std::exception(); // Not implemented.
-          return -1;
-          // return sqlite3_bind_blob(stmt, pos, arg.data(), arg.size(),
-          // SQLITE_TRANSIENT);
+        } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+          return sqlite3_bind_blob(stmt, pos, arg.data(), arg.size(),
+                                   SQLITE_TRANSIENT);
         } else if constexpr (std::is_same_v<T, std::monostate>) {
           return sqlite3_bind_null(stmt, pos);
         } else {
