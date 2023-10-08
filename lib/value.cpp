@@ -50,6 +50,34 @@ std::vector<Value> Value::fromJsiArgs(jsi::Runtime &rt, const jsi::Value *args,
   return vals;
 }
 
+Value Value::fromSqlite(sqlite3_stmt *stmt, int i) {
+  auto type = sqlite3_column_type(stmt, i);
+
+  switch (type) {
+  case SQLITE_INTEGER: {
+    return Value(sqlite3_column_int(stmt, i));
+  } break;
+  case SQLITE_FLOAT: {
+    return Value(sqlite3_column_double(stmt, i));
+  } break;
+  case SQLITE_TEXT: {
+    std::string text = std::string(
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
+    return Value(text);
+  } break;
+  case SQLITE_BLOB: {
+    auto blob = static_cast<const uint8_t *>(sqlite3_column_blob(stmt, i));
+    auto bytes = sqlite3_column_bytes(stmt, i);
+    return Value(std::vector(blob, blob + bytes));
+  } break;
+  case SQLITE_NULL: {
+    return Value();
+  } break;
+  }
+
+  __builtin_unreachable();
+}
+
 jsi::Value Value::toJsi(jsi::Runtime &rt) {
   jsi::Value val = std::visit(
       [&](auto arg) {

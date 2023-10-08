@@ -35,6 +35,8 @@ public:
   static std::vector<Value> fromJsiArgs(jsi::Runtime &rt,
                                         const jsi::Value *args, size_t count);
 
+  static Value fromSqlite(sqlite3_stmt *stmt, int i);
+
   jsi::Value toJsi(jsi::Runtime &rt);
 
   int bind(sqlite3_stmt *stmt, int pos);

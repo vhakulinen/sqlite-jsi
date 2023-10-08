@@ -21,42 +21,14 @@ typedef std::vector<Column> Row;
 
 jsi::Value Column::toValue(jsi::Runtime &rt) { return this->val.toJsi(rt); }
 
-Column parseColumn(sqlite3_stmt *stmt, int i) {
-  auto name = std::string(sqlite3_column_name(stmt, i));
-  auto type = sqlite3_column_type(stmt, i);
-
-  switch (type) {
-  case SQLITE_INTEGER: {
-    auto v = Column{name, Value(sqlite3_column_int(stmt, i))};
-    return Column{name, Value(sqlite3_column_int(stmt, i))};
-  } break;
-  case SQLITE_FLOAT: {
-    return Column{name, Value(sqlite3_column_double(stmt, i))};
-  } break;
-  case SQLITE_TEXT: {
-    std::string text = std::string(
-        reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
-    return Column{name, Value(text)};
-  } break;
-  case SQLITE_BLOB: {
-    auto blob = static_cast<const uint8_t *>(sqlite3_column_blob(stmt, i));
-    auto bytes = sqlite3_column_bytes(stmt, i);
-    return Column{name, Value(std::vector(blob, blob + bytes))};
-  } break;
-  case SQLITE_NULL: {
-    return Column{name, Value()};
-  } break;
-  }
-
-  __builtin_unreachable();
-}
-
 Row parseRow(sqlite3_stmt *stmt) {
   auto count = sqlite3_data_count(stmt);
   auto row = Row();
 
   for (int i = 0; i < count; i++) {
-    row.push_back(parseColumn(stmt, i));
+    auto name = std::string(sqlite3_column_name(stmt, i));
+
+    row.push_back(Column{name, Value::fromSqlite(stmt, i)});
   }
 
   return row;
