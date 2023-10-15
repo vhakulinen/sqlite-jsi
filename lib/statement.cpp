@@ -183,7 +183,7 @@ Statement::createGet(std::shared_ptr<std::vector<Value>> params) {
       STATEMENT_RESET_AND_RETURN(([resolve, row](jsi::Runtime &rt) {
         jsi::Object obj = jsi::Object(rt);
 
-        for (auto column : *row) {
+        for (auto &column : *row) {
           obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
         }
 
@@ -236,7 +236,7 @@ Statement::createSelect(std::shared_ptr<std::vector<Value>> &params) {
         for (size_t i = 0; i < rowObjs.length(rt); i++) {
           jsi::Object obj = jsi::Object(rt);
 
-          for (auto column : (*rows)[i]) {
+          for (auto &column : (*rows)[i]) {
             obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
           }
 
