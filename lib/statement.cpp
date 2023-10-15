@@ -2,6 +2,7 @@
 #include "sqlite3.h"
 
 #include "sqlite-jsi/connection.h"
+#include "sqlite-jsi/promise.h"
 #include "sqlite-jsi/statement.h"
 #include "sqlite-jsi/utils.h"
 #include "sqlite-jsi/value.h"
@@ -48,9 +49,8 @@ Row parseRow(sqlite3_stmt *stmt) {
       /* Clear the bindings. */                                                \
       sqlite3_clear_bindings(m_stmt);                                          \
       auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));         \
-      return (*m_invoker)([reject, bind, msg](jsi::Runtime &rt) {              \
-        auto err = sqliteError(rt, bind, *msg);                                \
-        reject->asObject(rt).asFunction(rt).call(rt, err);                     \
+      return (*m_invoker)([promise, bind, msg](jsi::Runtime &rt) {             \
+        promise->reject(rt, sqliteError(rt, bind, *msg));                      \
       });                                                                      \
     }                                                                          \
   }
@@ -70,15 +70,38 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Value>>(
+          auto params = std::make_shared<std::vector<Value>>(
               Value::fromJsiArgs(rt, args, count));
 
-          return rt.global()
-              .getPropertyAsFunction(rt, "Promise")
-              .callAsConstructor(
-                  rt, jsi::Function::createFromHostFunction(
-                          rt, jsi::PropNameID::forUtf8(rt, "Promise"), 2,
-                          createExec(queryParams)));
+          return Promise::createPromise(rt, [=](auto promise) {
+            // Enter executor.
+            m_executor->queue([=]() {
+              ConnectionGuard conn(*m_conn);
+
+              STATEMENT_BIND_OR_RETURN((*params));
+
+              int stepRes;
+              // While it would be a unusual use case, a statment's exec might
+              // as well return rows. If it does, ignore them.
+              while (stepRes = sqlite3_step(m_stmt), stepRes != SQLITE_DONE) {
+                if (stepRes == SQLITE_ROW) {
+                  // In case the statement gives us rows, ignore them.
+                  continue;
+                }
+
+                auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+                STATEMENT_RESET_AND_RETURN(
+                    ([promise, stepRes, msg](jsi::Runtime &rt) {
+                      promise->reject(rt, sqliteError(rt, stepRes, *msg));
+                    }));
+              }
+
+              STATEMENT_RESET_AND_RETURN(([promise](jsi::Runtime &rt) {
+                promise->resolve(rt, jsi::Value::undefined());
+              }));
+            });
+          });
         });
   }
 
@@ -87,15 +110,52 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Value>>(
+          auto params = std::make_shared<std::vector<Value>>(
               Value::fromJsiArgs(rt, args, count));
 
-          return rt.global()
-              .getPropertyAsFunction(rt, "Promise")
-              .callAsConstructor(
-                  rt, jsi::Function::createFromHostFunction(
-                          rt, jsi::PropNameID::forUtf8(rt, "Promise"), 2,
-                          createSelect(queryParams)));
+          return Promise::createPromise(rt, [=](auto promise) {
+            // Enter executor.
+            m_executor->queue([=]() {
+              ConnectionGuard conn(*m_conn);
+
+              STATEMENT_BIND_OR_RETURN((*params))
+
+              auto rows = std::make_shared<std::vector<Row>>();
+
+              int stepRes;
+              // While it would be a unusual use case, a statment's exec might
+              // return rows. If it does, ignore them.
+              while (stepRes = sqlite3_step(m_stmt), stepRes != SQLITE_DONE) {
+                if (stepRes == SQLITE_ROW) {
+                  rows->push_back(parseRow(m_stmt));
+                  continue;
+                }
+
+                auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+                STATEMENT_RESET_AND_RETURN(
+                    ([promise, stepRes, msg](jsi::Runtime &rt) {
+                      promise->reject(rt, sqliteError(rt, stepRes, *msg));
+                    }));
+              }
+
+              STATEMENT_RESET_AND_RETURN(([promise, rows](jsi::Runtime &rt) {
+                auto rowObjs = jsi::Array(rt, rows->size());
+                for (size_t i = 0; i < rowObjs.length(rt); i++) {
+                  jsi::Object obj = jsi::Object(rt);
+
+                  for (auto &column : (*rows)[i]) {
+                    obj.setProperty(rt, column.name.c_str(),
+                                    column.toValue(rt));
+                  }
+
+                  rowObjs.setValueAtIndex(rt, i, obj);
+                }
+
+                promise->resolve(rt, std::move(rowObjs));
+              }));
+            });
+          });
         });
   }
 
@@ -104,194 +164,74 @@ jsi::Value Statement::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
         rt, name, 1,
         [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
             size_t count) {
-          auto queryParams = std::make_shared<std::vector<Value>>(
+          auto params = std::make_shared<std::vector<Value>>(
               Value::fromJsiArgs(rt, args, count));
 
-          return rt.global()
-              .getPropertyAsFunction(rt, "Promise")
-              .callAsConstructor(
-                  rt, jsi::Function::createFromHostFunction(
-                          rt, jsi::PropNameID::forUtf8(rt, "Promise"), 2,
-                          createGet(queryParams)));
+          return Promise::createPromise(rt, [=](auto promise) {
+            m_executor->queue([=]() {
+              ConnectionGuard conn(*m_conn);
+
+              STATEMENT_BIND_OR_RETURN((*params));
+
+              int res = sqlite3_step(m_stmt);
+
+              // If we're already done, reject with "no rows" error.
+              if (res == SQLITE_DONE) {
+                STATEMENT_RESET_AND_RETURN(([promise](jsi::Runtime &rt) {
+                  promise->reject(rt, sqliteJSINoRowsError(rt));
+                }));
+              }
+
+              // Handle any errors.
+              if (res != SQLITE_ROW) {
+                auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+                STATEMENT_RESET_AND_RETURN(
+                    ([promise, res, msg](jsi::Runtime &rt) {
+                      promise->reject(rt, sqliteError(rt, res, *msg));
+                    }));
+              }
+
+              // Parse the row.
+              auto row = std::make_shared<Row>(parseRow(m_stmt));
+
+              if ((res = sqlite3_reset(m_stmt)) != SQLITE_OK) {
+                /**
+                 * NOTE(ville): Unlike the other API calls, in `get` we call
+                 * sqlite3_step only once and get what ever it returns.
+                 * According to sqlite3 docs, in such cases the reset might fail
+                 * even tho' the step call indicated no problems.
+                 *
+                 * I wasn't able to test such cases, so this code path is
+                 * untested...
+                 *
+                 * https://www.sqlite.org/c3ref/reset.html
+                 */
+
+                auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
+
+                sqlite3_clear_bindings(m_stmt);
+
+                return (*m_invoker)([promise, res, msg](jsi::Runtime &rt) {
+                  promise->reject(rt, sqliteError(rt, res, *msg));
+                });
+              }
+
+              STATEMENT_RESET_AND_RETURN(([promise, row](jsi::Runtime &rt) {
+                jsi::Object obj = jsi::Object(rt);
+
+                for (auto &column : *row) {
+                  obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
+                }
+
+                promise->resolve(rt, std::move(obj));
+              }));
+            });
+          });
         });
   }
 
   return jsi::Value::undefined();
-}
-
-jsi::HostFunctionType
-Statement::createGet(std::shared_ptr<std::vector<Value>> params) {
-  return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
-             const jsi::Value *args, size_t count) {
-    if (count < 2) {
-      throw jsi::JSError(rt, "Invalid promise constructor");
-    }
-
-    auto resolve = std::make_shared<jsi::Value>(rt, args[0]);
-    auto reject = std::make_shared<jsi::Value>(rt, args[1]);
-
-    m_executor->queue([=]() {
-      ConnectionGuard conn(*m_conn);
-
-      STATEMENT_BIND_OR_RETURN((*params));
-
-      int res = sqlite3_step(m_stmt);
-
-      // If we're already done, reject with "no rows" error.
-      if (res == SQLITE_DONE) {
-        STATEMENT_RESET_AND_RETURN(([reject](jsi::Runtime &rt) {
-          auto err = sqliteJSINoRowsError(rt);
-          reject->asObject(rt).asFunction(rt).call(rt, err);
-        }));
-      }
-
-      // Handle any errors.
-      if (res != SQLITE_ROW) {
-        auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
-
-        STATEMENT_RESET_AND_RETURN(([reject, res, msg](jsi::Runtime &rt) {
-          auto err = sqliteError(rt, res, *msg);
-          reject->asObject(rt).asFunction(rt).call(rt, err);
-        }));
-      }
-
-      // Parse the row.
-      auto row = std::make_shared<Row>(parseRow(m_stmt));
-
-      if ((res = sqlite3_reset(m_stmt)) != SQLITE_OK) {
-        /**
-         * NOTE(ville): Unlike the other API calls, in `get` we call
-         * sqlite3_step only once and get what ever it returns. According to
-         * sqlite3 docs, in such cases the reset might fail even tho' the step
-         * call indicated no problems.
-         *
-         * I wasn't able to test such cases, so this code path is untested...
-         *
-         * https://www.sqlite.org/c3ref/reset.html
-         */
-
-        auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
-
-        sqlite3_clear_bindings(m_stmt);
-
-        return (*m_invoker)([reject, res, msg](jsi::Runtime &rt) {
-          auto err = sqliteError(rt, res, *msg);
-          reject->asObject(rt).asFunction(rt).call(rt, err);
-        });
-      }
-
-      STATEMENT_RESET_AND_RETURN(([resolve, row](jsi::Runtime &rt) {
-        jsi::Object obj = jsi::Object(rt);
-
-        for (auto &column : *row) {
-          obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
-        }
-
-        resolve->asObject(rt).asFunction(rt).call(rt, obj);
-      }));
-    });
-
-    return jsi::Value::undefined();
-  };
-}
-
-jsi::HostFunctionType
-Statement::createSelect(std::shared_ptr<std::vector<Value>> &params) {
-  return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
-             const jsi::Value *args, size_t count) {
-    if (count < 2) {
-      throw jsi::JSError(rt, "Invalid promise constructor");
-    }
-
-    auto resolve = std::make_shared<jsi::Value>(rt, args[0]);
-    auto reject = std::make_shared<jsi::Value>(rt, args[1]);
-
-    // Enter executor.
-    m_executor->queue([=]() {
-      ConnectionGuard conn(*m_conn);
-
-      STATEMENT_BIND_OR_RETURN((*params))
-
-      auto rows = std::make_shared<std::vector<Row>>();
-
-      int stepRes;
-      // While it would be a unusual use case, a statment's exec might return
-      // rows. If it does, ignore them.
-      while (stepRes = sqlite3_step(m_stmt), stepRes != SQLITE_DONE) {
-        if (stepRes == SQLITE_ROW) {
-          rows->push_back(parseRow(m_stmt));
-          continue;
-        }
-
-        auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
-
-        STATEMENT_RESET_AND_RETURN(([reject, stepRes, msg](jsi::Runtime &rt) {
-          auto err = sqliteError(rt, stepRes, *msg);
-          reject->asObject(rt).asFunction(rt).call(rt, err);
-        }));
-      }
-
-      STATEMENT_RESET_AND_RETURN(([resolve, rows](jsi::Runtime &rt) {
-        auto rowObjs = jsi::Array(rt, rows->size());
-        for (size_t i = 0; i < rowObjs.length(rt); i++) {
-          jsi::Object obj = jsi::Object(rt);
-
-          for (auto &column : (*rows)[i]) {
-            obj.setProperty(rt, column.name.c_str(), column.toValue(rt));
-          }
-
-          rowObjs.setValueAtIndex(rt, i, obj);
-        }
-
-        resolve->asObject(rt).asFunction(rt).call(rt, rowObjs);
-      }));
-    });
-
-    return jsi::Value::undefined();
-  };
-}
-
-jsi::HostFunctionType
-Statement::createExec(std::shared_ptr<std::vector<Value>> &params) {
-  return [&](jsi::Runtime &rt, const jsi::Value &thisVal,
-             const jsi::Value *args, size_t count) {
-    if (count < 2) {
-      throw jsi::JSError(rt, "Invalid promise constructor");
-    }
-
-    auto resolve = std::make_shared<jsi::Value>(rt, args[0]);
-    auto reject = std::make_shared<jsi::Value>(rt, args[1]);
-
-    // Enter executor.
-    m_executor->queue([=]() {
-      ConnectionGuard conn(*m_conn);
-
-      STATEMENT_BIND_OR_RETURN((*params));
-
-      int stepRes;
-      // While it would be a unusual use case, a statment's exec might as well
-      // return rows. If it does, ignore them.
-      while (stepRes = sqlite3_step(m_stmt), stepRes != SQLITE_DONE) {
-        if (stepRes == SQLITE_ROW) {
-          // In case the statement gives us rows, ignore them.
-          continue;
-        }
-
-        auto msg = std::make_shared<std::string>(sqlite3_errmsg(&conn));
-
-        STATEMENT_RESET_AND_RETURN(([reject, stepRes, msg](jsi::Runtime &rt) {
-          auto err = sqliteError(rt, stepRes, *msg);
-          reject->asObject(rt).asFunction(rt).call(rt, err);
-        }));
-      }
-
-      STATEMENT_RESET_AND_RETURN(([resolve](jsi::Runtime &rt) {
-        resolve->asObject(rt).asFunction(rt).call(rt);
-      }));
-    });
-
-    return jsi::Value::undefined();
-  };
 }
 
 } // namespace sqlitejsi

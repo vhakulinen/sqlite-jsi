@@ -86,5 +86,4 @@ jsi::Function createToString(jsi::Runtime &rt, const jsi::PropNameID &name,
         return jsi::Value(rt, jsi::String::createFromUtf8(rt, str));
       });
 }
-
 } // namespace sqlitejsi

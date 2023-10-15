@@ -32,9 +32,5 @@ private:
 
   /// Database connection.
   std::shared_ptr<Connection> m_conn;
-
-  jsi::HostFunctionType createExec(std::shared_ptr<std::string> query);
-
-  jsi::HostFunctionType createPrepare(std::shared_ptr<std::string> query);
 };
 } // namespace sqlitejsi

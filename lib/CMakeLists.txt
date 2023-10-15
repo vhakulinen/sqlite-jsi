@@ -26,6 +26,7 @@ add_library(sqlite-jsi
     connection.cpp
     database.cpp
     executor.cpp
+    promise.cpp
     sqlite-jsi.cpp
     statement.cpp
     utils.cpp
