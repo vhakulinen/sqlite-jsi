@@ -80,7 +80,7 @@ Value Value::fromSqlite(sqlite3_stmt *stmt, int i) {
 
 jsi::Value Value::toJsi(jsi::Runtime &rt) {
   jsi::Value val = std::visit(
-      [&](auto arg) {
+      [&](auto &arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, int>) {
           return jsi::Value(arg);
@@ -107,7 +107,7 @@ int Value::bind(sqlite3_stmt *stmt, int pos) {
   assert(pos > 0); // SQLite bind positions start at 1.
 
   return std::visit(
-      [&](auto arg) {
+      [&](auto &arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, int>) {
           return sqlite3_bind_int(stmt, pos, arg);
