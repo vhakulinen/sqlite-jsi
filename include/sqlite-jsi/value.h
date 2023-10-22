@@ -27,7 +27,7 @@ class Value final {
 public:
   Value(std::string val) : m_val(ValueType(val)){};
   Value(double val) : m_val(ValueType(val)){};
-  Value(std::vector<uint8_t> val) : m_val(ValueType(val)){};
+  Value(std::vector<uint8_t> &&val) : m_val(ValueType(std::move(val))){};
   Value() : m_val(ValueType(std::monostate())){};
 
   static Value fromJsi(jsi::Runtime &rt, const jsi::Value &arg);
