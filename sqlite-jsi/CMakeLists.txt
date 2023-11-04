@@ -23,21 +23,33 @@ add_custom_command(
 )
 
 add_library(sqlite-jsi
-    connection.cpp
-    database.cpp
-    executor.cpp
-    promise.cpp
-    sqlite-jsi.cpp
-    statement.cpp
-    utils.cpp
-    value.cpp
+    src/connection.cpp
+    src/database.cpp
+    src/executor.cpp
+    src/promise.cpp
+    src/sqlite-jsi.cpp
+    src/statement.cpp
+    src/utils.cpp
+    src/value.cpp
     ${CMAKE_BINARY_DIR}/sqlite3/sqlite3.c
 )
 
-target_compile_features(sqlite-jsi PUBLIC cxx_std_17)
+target_compile_options(sqlite-jsi PRIVATE -Wall -Werror)
+
+target_include_directories(sqlite-jsi PUBLIC include)
 
 # Include sqlite.
 target_include_directories(sqlite-jsi PUBLIC ${CMAKE_BINARY_DIR}/sqlite3)
 
-# TODO: jsi/jsi.h should be configurable.
-target_include_directories(sqlite-jsi PUBLIC ${CMAKE_INSTALL_PREFIX}/hermes/include)
+if(NOT DEFINED JSI_HEADER_DIR)
+    message(STATUS "JSI_HEADER_DIR not defined")
+
+    # Include hermes, which brings jsi for us.
+    include(${PROJECT_SOURCE_DIR}/deps/Hermes.cmake)
+
+    message(STATUS "Using default JSI_HEADER_DIR")
+    set(JSI_HEADER_DIR "${hermes_SOURCE_DIR}/API/jsi")
+endif()
+
+message(STATUS "Using JSI headers from ${JSI_HEADER_DIR}")
+target_include_directories(sqlite-jsi PUBLIC ${JSI_HEADER_DIR})

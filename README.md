@@ -66,10 +66,8 @@ The build process could use some work.
 $ # Install dependecies, see https://hermesengine.dev/docs/building-and-running
 $ mkdir build
 $ (cd build && cmake -G Ninja ..)
-$ # First build the hermes-engine, which provides libhermes targer for our test-cli.
-$ (cd build && cmake --build . --target hermes-engine)
-$ # Build the test-cli, which includes the sqlite-jsi target.
-$ (cd build && cmake --build .)
+$ # Build the test-cli and FileCheck for running the tests.
+$ (cd build && cmake --build --target test-cli --target FileCheck)
 $ # Run the tests.
 $ bash test.sh
 ```
