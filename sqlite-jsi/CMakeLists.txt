@@ -8,6 +8,7 @@ add_library(sqlite-jsi
     src/promise.cpp
     src/sqlite-jsi.cpp
     src/statement.cpp
+    src/transaction.cpp
     src/utils.cpp
     src/value.cpp
     ${sqlite3_SOURCE_DIR}/sqlite3.c

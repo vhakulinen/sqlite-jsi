@@ -5,8 +5,10 @@
 #include "sqlite-jsi/promise.h"
 #include "sqlite-jsi/sqlite-jsi.h"
 #include "sqlite-jsi/statement.h"
+#include "sqlite-jsi/transaction.h"
 #include "sqlite-jsi/utils.h"
 #include "sqlite-jsi/value.h"
+#include <iostream>
 
 namespace sqlitejsi {
 using namespace sqlitejsi;
@@ -188,59 +190,165 @@ jsi::Value Database::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
           auto query =
               std::make_shared<std::string>(args[0].asString(rt).utf8(rt));
 
-          return Promise::createPromise(rt, [=](auto promise) {
-            m_executor->queue([=]() {
-              ConnectionGuard conn(*m_conn);
+          return this->prepare(rt, m_executor, query);
+        });
+  }
 
-              sqlite3_stmt *stmt = NULL;
-              const char *tail = NULL;
+  if (prop == "transaction") {
+    // db.transaction(async tx => {
+    //   await tx.select(....)
+    // })
+    return jsi::Function::createFromHostFunction(
+        rt, name, 1,
+        [&](jsi::Runtime &rt, const jsi::Value &thisVal, const jsi::Value *args,
+            size_t count) {
+          if (count < 1) {
+            throw jsi::JSError(rt, "transaction function missing");
+          }
 
-              int res =
-                  sqlite3_prepare_v2(&conn, query->c_str(), -1, &stmt, &tail);
-              if (res != SQLITE_OK) {
-                std::string errMsg = sqlite3_errmsg(&conn);
+          auto fn = std::make_shared<jsi::Function>(
+              args[0].asObject(rt).asFunction(rt));
+          auto tx = std::make_shared<Transaction>(
+              thisVal.asObject(rt).asHostObject<Database>(rt));
 
-                sqlite3_finalize(stmt);
-
-                return (*m_invoker)([promise, res, errMsg](jsi::Runtime &rt) {
-                  promise->reject(rt, sqliteError(rt, res, errMsg));
-                });
-              }
-
-              if (!stmt) {
-                // Probably not needed, but calling finalize on NULL pointer is
-                // harmless no-op.
-                sqlite3_finalize(stmt);
-
-                return (*m_invoker)([promise](jsi::Runtime &rt) {
-                  promise->reject(
-                      rt, sqliteJSIBadQueryError(
-                              rt, "query doesn't contain any sql statements"));
-                });
-              }
-
-              if (tail[0]) {
-                sqlite3_finalize(stmt);
-
-                return (*m_invoker)([promise](jsi::Runtime &rt) {
-                  promise->reject(
-                      rt, sqliteJSIBadQueryError(
-                              rt, "query must contain only one sql statement"));
-                });
-              }
-
-              auto stmtObj = std::make_shared<Statement>(m_conn, m_executor,
-                                                         m_invoker, stmt);
-              return (*m_invoker)([promise, stmtObj](jsi::Runtime &rt) {
-                promise->resolve(
-                    rt, jsi::Object::createFromHostObject(rt, stmtObj));
+          auto endFn = jsi::Function::createFromHostFunction(
+              rt, jsi::PropNameID::forAscii(rt, "txend"), 0,
+              [tx](jsi::Runtime &rt, const jsi::Value &thisVal,
+                   const jsi::Value *args, size_t count) {
+                tx->end();
+                return jsi::Value();
               });
-            });
-          });
+
+          auto commitFn = jsi::Function::createFromHostFunction(
+              rt, jsi::PropNameID::forAscii(rt, "commit"), 1,
+              [tx](jsi::Runtime &rt, const jsi::Value &thisVal,
+                   const jsi::Value *args, size_t count) {
+                auto resolved = count > 0
+                                    ? std::make_shared<jsi::Value>(rt, args[0])
+                                    : std::make_shared<jsi::Value>();
+
+                auto afterCommit = jsi::Function::createFromHostFunction(
+                    rt, jsi::PropNameID::forAscii(rt, "then"), 1,
+                    [resolved](jsi::Runtime &rt, const jsi::Value &thisVal,
+                               const jsi::Value *args, size_t count) {
+                      return Promise::staticResolve(rt, *resolved);
+                    });
+
+                auto param =
+                    jsi::Value(rt, jsi::String::createFromAscii(rt, "COMMIT"));
+                return tx->sqlExec(rt, &param, 1).asObject(rt);
+              });
+
+          auto rollbackFn = jsi::Function::createFromHostFunction(
+              rt, jsi::PropNameID::forAscii(rt, "rollback"), 1,
+              [tx](jsi::Runtime &rt, const jsi::Value &thisVal,
+                   const jsi::Value *args, size_t count) {
+                auto rejected = count > 0
+                                    ? std::make_shared<jsi::Value>(rt, args[0])
+                                    : std::make_shared<jsi::Value>();
+                auto afterRollback = jsi::Function::createFromHostFunction(
+                    rt, jsi::PropNameID::forAscii(rt, "then"), 1,
+                    [rejected](jsi::Runtime &rt, const jsi::Value &thisVal,
+                               const jsi::Value *args, size_t count) {
+                      return Promise::staticReject(rt, *rejected);
+                    });
+
+                auto param = jsi::Value(
+                    rt, jsi::String::createFromAscii(rt, "ROLLBACK"));
+                auto promise = tx->sqlExec(rt, &param, 1).asObject(rt);
+                return promise.getPropertyAsFunction(rt, "then")
+                    .callWithThis(rt, promise, afterRollback);
+              });
+
+          auto bodyFn = jsi::Function::createFromHostFunction(
+              rt, jsi::PropNameID::forAscii(rt, "then"), 1,
+              [fn, tx](jsi::Runtime &rt, const jsi::Value &thisVal,
+                       const jsi::Value *args, size_t count) {
+                return fn->call(rt, jsi::Object::createFromHostObject(rt, tx));
+              });
+
+          // Begin the transaction.
+          tx->begin(*m_executor);
+          auto param =
+              jsi::Value(rt, jsi::String::createFromAscii(rt, "BEGIN"));
+          auto promise = tx->sqlExec(rt, &param, 1).asObject(rt);
+          // Chainup the user provider transaction body.
+          promise = promise.getPropertyAsFunction(rt, "then")
+                        .callWithThis(rt, promise, bodyFn)
+                        .asObject(rt);
+          // Chainup commit and rollback.
+          promise = promise.getPropertyAsFunction(rt, "then")
+                        .callWithThis(rt, promise, commitFn, rollbackFn)
+                        .asObject(rt);
+
+          // And lastly, chainup finally to end the transaction.
+          return promise.getPropertyAsFunction(rt, "finally")
+              .callWithThis(rt, promise, endFn)
+              .asObject(rt);
         });
   }
 
   return jsi::Value::undefined();
 }
+
+template <typename T>
+jsi::Value Database::prepare(jsi::Runtime &rt, std::shared_ptr<T> executor,
+                             std::shared_ptr<std::string> query) {
+  return Promise::createPromise(rt, [=](auto promise) {
+    executor->queue([=]() {
+      ConnectionGuard conn(*m_conn);
+
+      sqlite3_stmt *stmt = NULL;
+      const char *tail = NULL;
+
+      int res = sqlite3_prepare_v2(&conn, query->c_str(), -1, &stmt, &tail);
+      if (res != SQLITE_OK) {
+        std::string errMsg = sqlite3_errmsg(&conn);
+
+        sqlite3_finalize(stmt);
+
+        return (*m_invoker)([promise, res, errMsg](jsi::Runtime &rt) {
+          promise->reject(rt, sqliteError(rt, res, errMsg));
+        });
+      }
+
+      if (!stmt) {
+        // Probably not needed, but calling finalize on NULL pointer is
+        // harmless no-op.
+        sqlite3_finalize(stmt);
+
+        return (*m_invoker)([promise](jsi::Runtime &rt) {
+          promise->reject(rt,
+                          sqliteJSIBadQueryError(
+                              rt, "query doesn't contain any sql statements"));
+        });
+      }
+
+      if (tail[0]) {
+        sqlite3_finalize(stmt);
+
+        return (*m_invoker)([promise](jsi::Runtime &rt) {
+          promise->reject(rt,
+                          sqliteJSIBadQueryError(
+                              rt, "query must contain only one sql statement"));
+        });
+      }
+
+      auto stmtObj =
+          std::make_shared<Statement>(m_conn, m_executor, m_invoker, stmt);
+      return (*m_invoker)([promise, stmtObj](jsi::Runtime &rt) {
+        promise->resolve(rt, jsi::Object::createFromHostObject(rt, stmtObj));
+      });
+    });
+  });
+}
+
+// Instantiate templates.
+template jsi::Value Database::prepare(jsi::Runtime &rt,
+                                      std::shared_ptr<Executor>,
+                                      std::shared_ptr<std::string> query);
+template jsi::Value Database::prepare(jsi::Runtime &rt,
+                                      std::shared_ptr<TransactionExecutor>,
+                                      std::shared_ptr<std::string> query);
 
 } // namespace sqlitejsi

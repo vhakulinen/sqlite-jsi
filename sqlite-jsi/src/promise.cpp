@@ -9,7 +9,8 @@ void Promise::resolve(jsi::Runtime &rt, jsi::Value &&v) {
 void Promise::reject(jsi::Runtime &rt, jsi::Value &&v) {
   m_reject.asObject(rt).asFunction(rt).call(rt, v);
 };
-facebook::jsi::Value
+
+jsi::Value
 Promise::createPromise(jsi::Runtime &rt,
                        std::function<void(std::shared_ptr<Promise>)> fn) {
   auto ctor = rt.global().getPropertyAsFunction(rt, "Promise");
@@ -32,4 +33,21 @@ Promise::createPromise(jsi::Runtime &rt,
 
   return ctor.callAsConstructor(rt, exec);
 };
+
+jsi::Value Promise::staticReject(jsi::Runtime &rt, const jsi::Value &value) {
+  return rt.global()
+      .getProperty(rt, "Promise")
+      .asObject(rt)
+      .getPropertyAsFunction(rt, "reject")
+      .call(rt, value);
+}
+
+jsi::Value Promise::staticResolve(jsi::Runtime &rt, const jsi::Value &value) {
+  return rt.global()
+      .getProperty(rt, "Promise")
+      .asObject(rt)
+      .getPropertyAsFunction(rt, "resolve")
+      .call(rt, value);
+}
+
 } // namespace sqlitejsi

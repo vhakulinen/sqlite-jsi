@@ -22,6 +22,10 @@ public:
 
   jsi::Value get(jsi::Runtime &, const jsi::PropNameID &name) override;
 
+  template <typename T>
+  jsi::Value prepare(jsi::Runtime &rt, std::shared_ptr<T> executor,
+                     std::shared_ptr<std::string> query);
+
   bool isBusy();
 
 private:

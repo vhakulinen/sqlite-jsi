@@ -11,6 +11,8 @@ namespace sqlitejsi {
 using namespace facebook;
 using namespace sqlitejsi;
 
+using Params = std::vector<Value>;
+
 class Statement : public jsi::HostObject {
 public:
   Statement(std::shared_ptr<Connection> conn,
@@ -24,6 +26,18 @@ public:
   }
 
   jsi::Value get(jsi::Runtime &, const jsi::PropNameID &name) override;
+
+  template <typename T>
+  jsi::Value sqlExec(jsi::Runtime &rt, std::shared_ptr<T> executor,
+                     const jsi::Value *args, size_t count);
+
+  template <typename T>
+  jsi::Value sqlSelect(jsi::Runtime &rt, std::shared_ptr<T> executor,
+                       const jsi::Value *args, size_t count);
+
+  template <typename T>
+  jsi::Value sqlGet(jsi::Runtime &rt, std::shared_ptr<T> executor,
+                    const jsi::Value *args, size_t count);
 
 private:
   std::shared_ptr<Connection> m_conn;
