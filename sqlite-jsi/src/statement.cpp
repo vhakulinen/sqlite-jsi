@@ -246,13 +246,18 @@ jsi::Value Statement::sqlGet(jsi::Runtime &rt, std::shared_ptr<T> executor,
   });
 }
 
-// Instantiate templates.
-template jsi::Value
-Statement::sqlExec<Executor>(jsi::Runtime &rt,
-                             std::shared_ptr<Executor> executor,
-                             const jsi::Value *args, size_t count);
-template jsi::Value Statement::sqlExec<TransactionExecutor>(
-    jsi::Runtime &rt, std::shared_ptr<TransactionExecutor> executor,
-    const jsi::Value *args, size_t count);
+#define EXECUTOR_TEMPLATE(exec)                                                \
+  template jsi::Value Statement::sqlExec<exec>(                                \
+      jsi::Runtime & rt, std::shared_ptr<exec> executor,                       \
+      const jsi::Value *args, size_t count);                                   \
+  template jsi::Value Statement::sqlGet<exec>(                                 \
+      jsi::Runtime & rt, std::shared_ptr<exec> executor,                       \
+      const jsi::Value *args, size_t count);                                   \
+  template jsi::Value Statement::sqlSelect<exec>(                              \
+      jsi::Runtime & rt, std::shared_ptr<exec> executor,                       \
+      const jsi::Value *args, size_t count);
+
+EXECUTOR_TEMPLATE(Executor)
+EXECUTOR_TEMPLATE(TransactionExecutor)
 
 } // namespace sqlitejsi

@@ -236,7 +236,9 @@ jsi::Value Database::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
 
                 auto param =
                     jsi::Value(rt, jsi::String::createFromAscii(rt, "COMMIT"));
-                return tx->sqlExec(rt, &param, 1).asObject(rt);
+                auto promise = tx->sqlExec(rt, &param, 1).asObject(rt);
+                return promise.getPropertyAsFunction(rt, "then")
+                    .callWithThis(rt, promise, afterCommit);
               });
 
           auto rollbackFn = jsi::Function::createFromHostFunction(

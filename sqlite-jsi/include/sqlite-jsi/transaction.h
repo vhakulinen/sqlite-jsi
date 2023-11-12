@@ -88,10 +88,8 @@ public:
   void end();
 
   jsi::Value sqlExec(jsi::Runtime &rt, const jsi::Value *args, size_t count);
-  // jsi::Value sqlSelect(jsi::Runtime &rt, const jsi::Value *args, size_t
-  // count);
-  // jsi::Value sqlGet(jsi::Runtime &rt, const jsi::Value *args, size_t
-  // count);
+  jsi::Value sqlSelect(jsi::Runtime &rt, const jsi::Value *args, size_t count);
+  jsi::Value sqlGet(jsi::Runtime &rt, const jsi::Value *args, size_t count);
 
 private:
   std::shared_ptr<Database> m_db;
