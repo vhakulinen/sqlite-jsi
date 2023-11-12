@@ -35,16 +35,21 @@ const rows = await stmt.select(2);
 // Or just execute without retrieving any rows.
 await stmt.execute(3);
 
-// Because of the async nature, doing transactions is more involved.
+// Transaction blocks (or "steals") the db's background thread and only allows
+// queries through the tx object to be executed until the provided promise
+// resolves.
 //
-// While the following is not yet implemented, transactions would look something
-// like this:
-db.trasnaction(tx => 
-    // tx is another database connection which lives for the duration of the
-    // following promise. SQlite is trusted to handle concurrency (at least
-    // with the async api).
-    tx.exec('....')
-)
+// Throwing or returning rejected promise will cause a rollback.
+db.trasnaction(async tx => {
+    // i.e. this works.
+    await tx.exec('...');
+    // But this would deadlock.
+    // await db.exec('...');
+
+
+    // The promise will resolve to the returned value.
+    return tx.select('...');
+})
 ```
 # Code
 
