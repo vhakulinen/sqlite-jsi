@@ -5,10 +5,11 @@
 #include <functional>
 #include <thread>
 
-#include "sqlite-jsi/executor.h"
+#include "jsi/jsi.h"
 
 namespace sqlitejsi {
 using namespace sqlitejsi;
+using namespace facebook;
 
 using WorkItem = std::function<void()>;
 
@@ -17,7 +18,7 @@ public:
   Executor();
   ~Executor();
 
-  void queue(WorkItem work);
+  void queue(jsi::Runtime &rt, WorkItem work);
 
   bool isBusy();
 

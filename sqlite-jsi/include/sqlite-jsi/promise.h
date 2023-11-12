@@ -14,9 +14,9 @@ public:
 
   void reject(jsi::Runtime &rt, jsi::Value &&v);
 
-  static jsi::Value
-  createPromise(jsi::Runtime &rt,
-                std::function<void(std::shared_ptr<Promise>)> fn);
+  static jsi::Value createPromise(
+      jsi::Runtime &rt,
+      std::function<void(jsi::Runtime &rt, std::shared_ptr<Promise>)> fn);
 
   static jsi::Value staticReject(jsi::Runtime &rt, const jsi::Value &value);
   static jsi::Value staticResolve(jsi::Runtime &rt, const jsi::Value &value);

@@ -13,10 +13,13 @@ namespace sqlitejsi {
 using namespace facebook;
 using namespace sqlitejsi;
 
-void TransactionExecutor::queue(WorkItem work) {
+void TransactionExecutor::queue(jsi::Runtime &rt, WorkItem work) {
   std::lock_guard lock(m_m);
-  // TODO(ville): Should probably throw a jsi error instead?
-  assert(((void)"can't add work to closed executor", m_done == false));
+
+  if (m_done) {
+    throw jsi::JSError(rt, "tried to use closed transaction");
+  }
+
   m_workitems.push_back(work);
   m_cv.notify_all();
 };
@@ -99,10 +102,10 @@ jsi::Value Transaction::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
   return jsi::Value::undefined();
 }
 
-void Transaction::begin(Executor &executor) {
+void Transaction::begin(jsi::Runtime &rt, Executor &executor) {
   // Queue our own worker in the executor. I'll block it and allows only us
   // to do any work.
-  executor.queue([=, txexecutor = m_txexecutor] { txexecutor->worker(); });
+  executor.queue(rt, [=, txexecutor = m_txexecutor] { txexecutor->worker(); });
 }
 
 void Transaction::end() { m_txexecutor->done(); }

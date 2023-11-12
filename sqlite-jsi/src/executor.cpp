@@ -49,10 +49,10 @@ void Executor::worker() {
   }
 }
 
-void Executor::queue(WorkItem work) {
+void Executor::queue(jsi::Runtime &rt, WorkItem work) {
   std::lock_guard lock(m_m);
 
-  // TODO(ville): Check m_exit.
+  // TODO(ville): Check m_exit and throw error if needed.
 
   m_workitems.push_back(work);
   m_cv.notify_all();

@@ -58,9 +58,9 @@ jsi::Value Database::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
           auto queryStr =
               std::make_shared<std::string>(args[0].asString(rt).utf8(rt));
 
-          return Promise::createPromise(rt, [=](auto promise) {
+          return Promise::createPromise(rt, [=](auto &rt, auto promise) {
             // Enter executor.
-            m_executor->queue([=]() {
+            m_executor->queue(rt, [=]() {
               ConnectionGuard conn(*m_conn);
               const char *query = queryStr->c_str();
               const char *tail = query;
@@ -270,7 +270,7 @@ jsi::Value Database::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
               });
 
           // Begin the transaction.
-          tx->begin(*m_executor);
+          tx->begin(rt, *m_executor);
           auto param =
               jsi::Value(rt, jsi::String::createFromAscii(rt, "BEGIN"));
           auto promise = tx->sqlExec(rt, &param, 1).asObject(rt);
@@ -296,8 +296,8 @@ jsi::Value Database::get(jsi::Runtime &rt, const jsi::PropNameID &name) {
 template <typename T>
 jsi::Value Database::prepare(jsi::Runtime &rt, std::shared_ptr<T> executor,
                              std::shared_ptr<std::string> query) {
-  return Promise::createPromise(rt, [=](auto promise) {
-    executor->queue([=]() {
+  return Promise::createPromise(rt, [=](auto &rt, auto promise) {
+    executor->queue(rt, [=]() {
       ConnectionGuard conn(*m_conn);
 
       sqlite3_stmt *stmt = NULL;

@@ -10,9 +10,9 @@ void Promise::reject(jsi::Runtime &rt, jsi::Value &&v) {
   m_reject.asObject(rt).asFunction(rt).call(rt, v);
 };
 
-jsi::Value
-Promise::createPromise(jsi::Runtime &rt,
-                       std::function<void(std::shared_ptr<Promise>)> fn) {
+jsi::Value Promise::createPromise(
+    jsi::Runtime &rt,
+    std::function<void(jsi::Runtime &rt, std::shared_ptr<Promise>)> fn) {
   auto ctor = rt.global().getPropertyAsFunction(rt, "Promise");
 
   auto exec = jsi::Function::createFromHostFunction(
@@ -26,7 +26,7 @@ Promise::createPromise(jsi::Runtime &rt,
         auto promise = std::make_shared<Promise>(jsi::Value(rt, args[0]),
                                                  jsi::Value(rt, args[1]));
 
-        fn(promise);
+        fn(rt, promise);
 
         return jsi::Value::undefined();
       });

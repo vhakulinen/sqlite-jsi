@@ -19,7 +19,7 @@ public:
   TransactionExecutor() : m_done(false), m_workerdone(false) {}
   ~TransactionExecutor() {}
 
-  void queue(WorkItem work);
+  void queue(jsi::Runtime &rt, WorkItem work);
 
 private:
   std::mutex m_m;
@@ -49,7 +49,7 @@ public:
 
   /// Begin puts the transaction's own executor to the provided executor's
   /// queue, blocking it until the trasnaction completes.
-  void begin(Executor &executor);
+  void begin(jsi::Runtime &rt, Executor &executor);
   /// Ends the transaction's own exectuor, returning the control back to the
   /// original executor's loop.
   void end();

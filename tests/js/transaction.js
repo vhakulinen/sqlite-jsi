@@ -126,6 +126,17 @@ const blockOthers = () => {
 // CHECK-NEXT: tx deleted
 // CHECK-NEXT: non-tx query: [{"col1":34,"col2":"blocked"}]
 
+const useAfterDone = () => {
+  print("use after done:")
+  return db.transaction(tx => tx)
+    .then(tx =>
+      tx.select('SELECT 1')
+        .then(rows => print('should not reach this', JSON.stringify(rows)))
+    ).catch(err => print('expected error:', err));
+}
+// CHECK-LABEL: use after done:
+// CHECK-NEXT: expected error: Error: tried to use closed transaction
+
 init()
   .then(commits)
   .then(commitResolves)
@@ -135,6 +146,7 @@ init()
   .then(preparedStatements)
   .then(rollbacks)
   .then(blockOthers)
+  .then(useAfterDone)
   .then(() => print("done."))
   .catch(err => print("OH NO", err));
 // CHECK-NEXT: done.

@@ -101,9 +101,9 @@ jsi::Value Statement::sqlExec(jsi::Runtime &rt, std::shared_ptr<T> executor,
                               const jsi::Value *args, size_t count) {
   auto params = std::make_shared<Params>(Value::fromJsiArgs(rt, args, count));
 
-  return Promise::createPromise(rt, [=](auto promise) {
+  return Promise::createPromise(rt, [=](auto &rt, auto promise) {
     // Enter executor.
-    executor->queue([=]() {
+    executor->queue(rt, [=]() {
       ConnectionGuard conn(*m_conn);
 
       STATEMENT_BIND_OR_RETURN((*params));
@@ -136,9 +136,9 @@ jsi::Value Statement::sqlSelect(jsi::Runtime &rt, std::shared_ptr<T> executor,
                                 const jsi::Value *args, size_t count) {
   auto params = std::make_shared<Params>(Value::fromJsiArgs(rt, args, count));
 
-  return Promise::createPromise(rt, [=](auto promise) {
+  return Promise::createPromise(rt, [=](auto &rt, auto promise) {
     // Enter executor.
-    executor->queue([=]() {
+    executor->queue(rt, [=]() {
       ConnectionGuard conn(*m_conn);
 
       STATEMENT_BIND_OR_RETURN((*params))
@@ -184,8 +184,8 @@ jsi::Value Statement::sqlGet(jsi::Runtime &rt, std::shared_ptr<T> executor,
                              const jsi::Value *args, size_t count) {
   auto params = std::make_shared<Params>(Value::fromJsiArgs(rt, args, count));
 
-  return Promise::createPromise(rt, [=](auto promise) {
-    executor->queue([=]() {
+  return Promise::createPromise(rt, [=](auto &rt, auto promise) {
+    executor->queue(rt, [=]() {
       ConnectionGuard conn(*m_conn);
 
       STATEMENT_BIND_OR_RETURN((*params));
