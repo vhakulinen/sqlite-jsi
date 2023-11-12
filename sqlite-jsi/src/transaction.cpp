@@ -13,6 +13,53 @@ namespace sqlitejsi {
 using namespace facebook;
 using namespace sqlitejsi;
 
+void TransactionExecutor::queue(WorkItem work) {
+  std::lock_guard lock(m_m);
+  // TODO(ville): Should probably throw a jsi error instead?
+  assert(((void)"can't add work to closed executor", m_done == false));
+  m_workitems.push_back(work);
+  m_cv.notify_all();
+};
+
+void TransactionExecutor::done() {
+  std::lock_guard lock(m_m);
+  m_done = true;
+  m_cv.notify_all();
+}
+
+bool TransactionExecutor::workerdone() {
+  std::lock_guard lock(m_m);
+  return m_workerdone;
+}
+
+void TransactionExecutor::worker() {
+  for (;;) {
+    std::unique_lock<std::mutex> lock(m_m);
+    m_cv.wait(lock, [&] { return !m_workitems.empty() || m_done; });
+
+    // Consume all queued items.
+    while (!m_workitems.empty()) {
+      auto work = m_workitems.front();
+      m_workitems.pop_front();
+
+      // Unlock when executing the queued work.
+      lock.unlock();
+      work();
+
+      // Lock again for checking m_workitems and m_done.
+      lock.lock();
+    }
+
+    // Break the loop if we're done.
+    if (m_done) {
+      break;
+    }
+  }
+
+  std::lock_guard lock(m_m);
+  m_workerdone = true;
+}
+
 #define STATEMENT_FROM_VALUE(query)                                            \
   query.isString()                                                             \
       ? m_db->prepare(                                                         \

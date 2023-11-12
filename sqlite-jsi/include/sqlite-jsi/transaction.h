@@ -19,13 +19,7 @@ public:
   TransactionExecutor() : m_done(false), m_workerdone(false) {}
   ~TransactionExecutor() {}
 
-  void queue(WorkItem work) {
-    std::lock_guard lock(m_m);
-    // TODO(ville): Should probably throw a jsi error instead?
-    assert(((void)"can't add work to closed executor", m_done == false));
-    m_workitems.push_back(work);
-    m_cv.notify_all();
-  };
+  void queue(WorkItem work);
 
 private:
   std::mutex m_m;
@@ -34,48 +28,21 @@ private:
   bool m_done;
   bool m_workerdone;
 
-  void done() {
-    std::lock_guard lock(m_m);
-    m_done = true;
-    m_cv.notify_all();
-  }
+  void done();
 
-  bool workerdone() {
-    std::lock_guard lock(m_m);
-    return m_workerdone;
-  }
+  bool workerdone();
 
-  void worker() {
-    for (;;) {
-      std::unique_lock<std::mutex> lock(m_m);
-      m_cv.wait(lock, [&] { return !m_workitems.empty() || m_done; });
-
-      if (m_workitems.empty()) {
-        if (m_done) {
-          break;
-        }
-
-        assert(((void)"transaction worker woke without work", false));
-      }
-
-      auto work = m_workitems.front();
-      m_workitems.pop_front();
-      lock.unlock();
-      work();
-    }
-
-    std::lock_guard lock(m_m);
-    m_workerdone = true;
-  }
+  void worker();
 };
 
 class Transaction : public jsi::HostObject {
 public:
   Transaction(std::shared_ptr<Database> db)
       : m_db(db), m_txexecutor(std::make_shared<TransactionExecutor>()) {}
+
   ~Transaction() {
-    assert(((void)"Transaction executor worker should be done",
-            m_txexecutor->workerdone()));
+    assert(m_txexecutor->workerdone() &&
+           "transaction executor should be done on dtor");
   }
 
   jsi::Value get(jsi::Runtime &rt, const jsi::PropNameID &name) override;
