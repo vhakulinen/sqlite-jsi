@@ -27,7 +27,6 @@ private:
   std::deque<WorkItem> m_workitems;
   std::thread m_thread;
   bool m_exit;
-  bool m_busy;
 
   std::condition_variable m_cv;
 
