@@ -87,7 +87,9 @@ const preparedStatements = () => {
 const rollbacks = () => {
   print("rollbacks:")
   return db.transaction(tx =>
-    tx.exec(`INSERT INTO txtable (col1, col2) VALUES (3, 'throws')`)
+    tx.exec(`INSERT INTO txtable (col1, col2) VALUES (3, 'throws'), (4, 'throws')`)
+      .then(() => tx.select("SELECT col1, col2 FROM txtable WHERE col2 = 'throws'"))
+      .then(rows => print('before rejection:', JSON.stringify(rows)))
       .then(() => Promise.reject('reject in transaction'))
   ).finally(() =>
     db.select("SELECT * FROM txtable WHERE col2 = 'throws'")
@@ -95,6 +97,7 @@ const rollbacks = () => {
   ).catch(err => print('threw', err));
 }
 // CHECK-LABEL: rollbacks:
+// CHECK-NEXT: before rejection: [{"col1":3,"col2":"throws"},{"col1":4,"col2":"throws"}]
 // CHECK-NEXT: rows after threw []
 // CHECK-NEXT: threw reject in transaction
 
