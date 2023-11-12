@@ -54,28 +54,26 @@ int main(int argc, char **argv) {
   rt->evaluatePreparedJavaScript(js);
 
   for (;;) {
-    std::unique_lock<std::mutex> lock(mutex_invoke_callbacks, std::defer_lock);
-    lock.lock();
+    std::unique_lock<std::mutex> lock(mutex_invoke_callbacks);
 
-    sqlitejsi::RtExec fn = nullptr;
-    if (!invoke_callbacks->empty()) {
-      fn = invoke_callbacks->front();
+    while (!invoke_callbacks->empty()) {
+      auto fn = invoke_callbacks->front();
       invoke_callbacks->pop_front();
+
+      lock.unlock();
+      fn(*rt);
+
+      lock.lock();
     }
-    lock.unlock();
 
-    // We must've ran out of things to do.
-    if (fn == nullptr) {
-      if (sqlite->isBusy()) {
-        // Some database is still doing some work.
-        continue;
-      }
-
+    if (!sqlite->isBusy()) {
       break;
     }
-
-    fn(*rt);
   }
+
+  std::unique_lock<std::mutex> lock(mutex_invoke_callbacks);
+  assert(!sqlite->isBusy() && "sqlite-jsi must not be busy");
+  assert(invoke_callbacks->empty() && "invoke callbacks must be empty");
 
   return 0;
 }
